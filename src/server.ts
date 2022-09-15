@@ -23,7 +23,7 @@ interface RequestContext {
   upgradeReadable: streams.Readable | null;
 }
 
-export class Server extends AbstractCommon {
+export class Server extends AbstractCommon implements streams.Duplex {
   private _requestHandlers: Record<string, RequestHandler<any>> = {};
   private _requestContexts: Record<number, RequestContext> = {};
 

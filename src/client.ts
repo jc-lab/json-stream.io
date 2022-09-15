@@ -40,7 +40,7 @@ interface RequestContext {
   cancelled: boolean;
 }
 
-export class Client extends AbstractCommon {
+export class Client extends AbstractCommon implements streams.Duplex {
   private _requestContexts: Record<number, RequestContext> = {};
   private _streamId: number = 1;
 
