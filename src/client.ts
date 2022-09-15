@@ -140,9 +140,9 @@ export class Client extends AbstractCommon implements streams.Duplex {
         }
         this._requestContexts[streamId] = requestContext;
         this.sendPayload({streamId, opCode: requestOpCode}, Buffer.concat([
-          binaryHeader,
+          Buffer.from(binaryHeader),
           Buffer.from([0]),
-          binaryData
+          Buffer.from(binaryData)
         ]))
           .catch((err) => {
             delete this._requestContexts[streamId];
