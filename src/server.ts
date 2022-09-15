@@ -17,6 +17,10 @@ interface RequestContext {
 
   sentData: boolean;
   responseFinished: boolean;
+
+  upgrade: boolean;
+  upgradeWritable: streams.Writable | null;
+  upgradeReadable: streams.Readable | null;
 }
 
 export class Server extends AbstractCommon {
@@ -94,21 +98,17 @@ export class Server extends AbstractCommon {
         requestWithStream: null,
         responseWithStream: false,
         responseFinished: false,
-        sentData: false
+        sentData: false,
+
+        upgrade: false,
+        upgradeWritable: null,
+        upgradeReadable: null
       };
       if (withStreamRequest) {
         requestContext.requestWithStream = new streams.PassThrough();
         this._requestContexts[header.streamId] = requestContext;
       }
 
-      const done = () => {
-        if (requestContext.responseFinished) return ;
-
-        requestContext.responseFinished = true;
-        if (!requestContext.sentData) {
-          console.error(new Error('error 1'));
-        }
-      }
       const sendData = (data: any) => {
         if (requestContext.sentData) {
           throw new Error('Already sent data');
@@ -117,17 +117,23 @@ export class Server extends AbstractCommon {
 
         const binary = this.holder.textEncode(JSON.stringify(data));
         let opCode = OpCode.response_resolve;
-        opCode |= requestContext.responseWithStream ? OpCode.flag_include_stream : OpCode.flag_end;
+        if (requestContext.responseWithStream) {
+          opCode |= OpCode.flag_include_stream;
+        } else {
+          opCode |= OpCode.flag_end;
+          if (requestContext.upgrade) {
+            opCode |= OpCode.flag_upgrade;
+          }
+        }
 
         this.sendPayload({ streamId: header.streamId, opCode }, binary)
           .then(() => {
             if (!requestContext.responseWithStream) {
-              done();
+              this.requestDone(requestContext);
             }
           })
           .catch((err) => {
-            console.error(err);
-            done();
+            this.requestDone(requestContext, err);
           });
       }
 
@@ -137,21 +143,34 @@ export class Server extends AbstractCommon {
         withStream: () => {
           requestContext.responseWithStream = true;
         },
+        withUpgrade: (writable: streams.Writable, readable: streams.Readable) => {
+          requestContext.upgrade = true;
+          requestContext.upgradeWritable = writable;
+          requestContext.upgradeReadable = readable;
+        },
         send: (data) => sendData(data),
         streamWrite: (chunk: Buffer, callback: (error?: (Error | null)) => void) => {
+          if (!requestContext.sentData) {
+            return callback(new Error('must send data before write stream'));
+          }
           const opCode = OpCode.stream_data;
           this.sendPayload({streamId: header.streamId, opCode}, chunk)
             .then(() => callback())
             .catch((err) => callback(err));
         },
         streamFinal: (callback: (error?: (Error | null)) => void) => {
-          const opCode = OpCode.stream_data | OpCode.flag_end;
+          let opCode = OpCode.stream_data | OpCode.flag_end;
+          if (requestContext.upgrade) {
+            opCode |= OpCode.flag_upgrade;
+          }
+
           this.sendPayload({streamId: header.streamId, opCode}, null)
             .then(() => {
+              this.requestDone(requestContext);
               callback();
             })
             .catch((err) => {
-              done();
+              this.requestDone(requestContext, err);
               callback(err);
             });
         }
@@ -160,24 +179,44 @@ export class Server extends AbstractCommon {
       this.holder.nextTick(() => {
         const next = (err?: any, data?: any) => {
           if (err) {
-            return sendReject(err.message);
+            sendReject(err.message)
+              .catch((err) => {
+                console.error(err);
+              });
+            return ;
           }
           if (data) {
             sendData(data);
+          } else {
+            if (!requestContext.responseWithStream) {
+              this.requestDone(requestContext);
+            }
           }
-          done();
         };
-        const ret = requestHandler(req, res, next);
-        if (isPromise(ret)) {
-          ret
-            .then((data) => next(null, data))
-            .catch((err) => next(err));
+        try {
+          const ret = requestHandler(req, res, next);
+          if (isPromise(ret)) {
+            ret
+              .then((data) => next(null, data))
+              .catch((err) => next(err));
+          }
+        } catch (err: any) {
+          next(err);
         }
       });
 
       return Promise.resolve();
     } catch (err: any) {
       return sendReject(err.message);
+    }
+  }
+
+  private requestDone(requestContext: RequestContext, err?: any) {
+    if (!err && !requestContext.sentData) {
+      console.error(new Error('request is done without sent data'));
+    }
+    if (requestContext.upgrade) {
+      this.upgradeTo(requestContext.upgradeWritable, requestContext.upgradeReadable);
     }
   }
 }

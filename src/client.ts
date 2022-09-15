@@ -1,4 +1,5 @@
 import * as streams from 'stream';
+import Duplexify from 'duplexify';
 import {Header, OpCode} from './header';
 import {AbstractCommon, RequestHeader} from './base';
 
@@ -47,10 +48,10 @@ export class Client extends AbstractCommon {
     const requestContext = this._requestContexts[header.streamId];
     if (requestContext) {
       const done = () => {
-        delete this._requestContexts[header.streamId];
         if (requestContext.responseWithStream) {
           requestContext.responseWithStream.end();
         }
+        this.requestDone(requestContext, header);
       };
 
       requestContext.responsed = true;
@@ -59,7 +60,6 @@ export class Client extends AbstractCommon {
         requestContext.timer = null;
       }
 
-      console.log('REC', Number(header.opCode).toString(16));
       const type = header.opCode & 0x0f;
       if (type === OpCode.response_resolve) {
         const data = content ? JSON.parse(content && this.holder.textDecode(content)) : {};
@@ -70,7 +70,6 @@ export class Client extends AbstractCommon {
           done();
         }
       } else if (type === OpCode.response_reject) {
-        console.log('reject', content);
         requestContext.reject(new Error(content?.toString() || 'error'));
         done();
       } else if (type === OpCode.stream_data) {
@@ -175,5 +174,17 @@ export class Client extends AbstractCommon {
         reject(e);
       }
     });
+  }
+
+  private requestDone(requestContext: RequestContext, header: Header): void {
+    delete this._requestContexts[requestContext.streamId];
+    if (header.opCode & OpCode.flag_upgrade) {
+      this._upgradeRequested = true;
+      const a = new streams.PassThrough();
+      const b = new streams.PassThrough();
+      const stream = Duplexify(a, b);
+      this.upgradeTo(b, a);
+      this.emit('upgrade', stream);
+    }
   }
 }

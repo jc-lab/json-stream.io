@@ -54,7 +54,7 @@ client.request('hello', {...data...}, {
     // res.stream
   });
 client.on('upgrade', (stream) => {
-  stream // use it
+  // use stream
 });
 
 ```

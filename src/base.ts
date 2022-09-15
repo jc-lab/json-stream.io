@@ -38,6 +38,9 @@ export abstract class AbstractCommon extends Duplexify {
   private readonly _receiveBuffer: ReadBuffer = new ReadBuffer();
   private _receiveHeader: Header | null = null;
 
+  protected _upgradeRequested: boolean = false;
+  protected _upgraded: boolean = false;
+
   constructor(options?: Partial<Options>) {
     super();
 
@@ -49,13 +52,7 @@ export abstract class AbstractCommon extends Duplexify {
     this.writeStream = new streams.PassThrough();
     this.readStream = new streams.Writable({
       autoDestroy: true,
-      write: (chunk: any, encoding: BufferEncoding, callback2: (error?: (Error | null)) => void) => {
-        const uuid = Math.random();
-        console.log('_WRITE ', uuid, 'START');
-        const callback = (error?: (Error | null)) => {
-          console.log('_WRITE ', uuid, 'END');
-          callback2(error);
-        };
+      write: (chunk: any, encoding: BufferEncoding, callback: (error?: (Error | null)) => void) => {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
         this._receiveBuffer.append(buffer);
         const next = () => {
@@ -86,9 +83,17 @@ export abstract class AbstractCommon extends Duplexify {
     super.setWritable(this.readStream);
   }
 
+  public get upgraded(): boolean {
+    return this._upgraded || this._upgradeRequested;
+  }
+
   protected abstract handleIncoming(header: Header, content: Buffer | null): Promise<void>;
 
   protected sendPayload(header: Partial<Header>, data: Uint8Array | null): Promise<any> {
+    if (this._upgraded) {
+      return Promise.reject(new Error('upgraded'));
+    }
+
     const streamId = header.streamId || 0;
     const opcode = header.opCode as number;
 

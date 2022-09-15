@@ -2,14 +2,13 @@ import * as streams from 'stream';
 
 export interface ResponseHandlers {
   withStream(): void;
+  withUpgrade(writable: streams.Writable, readable: streams.Readable): void;
   send(data: any): void;
   streamWrite(chunk: Buffer, callback: (error?: (Error | null)) => void): void;
   streamFinal(callback: (error?: (Error | null)) => void): void;
 }
 
 export class Response extends streams.Writable {
-  protected _upgradeWritable: streams.Writable | null = null;
-  protected _upgradeReadable: streams.Readable | null = null;
   protected _finished: boolean = false;
 
   constructor(
@@ -21,8 +20,7 @@ export class Response extends streams.Writable {
   }
 
   public withUpgrade(writable: streams.Writable, readable: streams.Readable): this {
-    this._upgradeWritable = writable;
-    this._upgradeReadable = readable;
+    this.handlers.withUpgrade(writable, readable);
     return this;
   }
 
