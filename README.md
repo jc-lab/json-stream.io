@@ -18,7 +18,7 @@ $ npm install --save json-protocol-stream
 
 # WARNING
 
-See [test/sample.ts](test/sample.ts). Upload is not working yet...
+Backpressure is not implemented yet.
 
 # Usage
 

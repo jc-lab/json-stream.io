@@ -91,6 +91,7 @@ export class Client extends AbstractCommon implements streams.Duplex {
               });
             } else {
               checkEnd();
+              resolve();
             }
           });
         }
