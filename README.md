@@ -7,13 +7,13 @@ json-stream.io is a JSON-based Request-Response protocol, and the protocol can b
 **YARN**
 
 ```bash
-$ yarn add json-protocol-stream
+$ yarn add json-stream.io
 ```
 
 **NPM**
 
 ```bash
-$ npm install --save json-protocol-stream
+$ npm install --save json-stream.io
 ```
 
 # Usage
