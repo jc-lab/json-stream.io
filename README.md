@@ -16,10 +16,6 @@ $ yarn add json-protocol-stream
 $ npm install --save json-protocol-stream
 ```
 
-# WARNING
-
-Backpressure is not implemented yet.
-
 # Usage
 
 ```typescript
